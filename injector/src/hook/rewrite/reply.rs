@@ -417,9 +417,9 @@ pub(super) fn build_omk_service_reply(
                     Ok(entry) => break entry,
                     Err(error) => {
                         let not_found = format!("{error:?}").contains("KEY_NOT_FOUND");
-                        if not_found && attempt < 4 {
+                        if not_found && attempt < 20 {
                             attempt += 1;
-                            std::thread::sleep(std::time::Duration::from_millis(5));
+                            std::thread::sleep(std::time::Duration::from_millis(25));
                             continue;
                         }
                         return omk_error_reply_for_method("getKeyEntry", caller, &error);
