@@ -677,17 +677,14 @@ impl IKeyMintDevice for KeyMintWrapper {
     ) -> Result<crate::android::hardware::security::keymint::BeginResult::BeginResult, Status> {
         let version_number = resolve_hardware_profile(self.security_level).version_number;
         log::info!(
-            "event=omk_begin purpose={:?} blob_len={} blob_sha={}",
+            "event=omk_begin purpose={:?} blob_len={} blob_head={}",
             purpose,
             key_blob.len(),
-            {
-                use sha2::{Digest, Sha256};
-                let digest = Sha256::digest(key_blob);
-                digest[..8]
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>()
-            }
+            key_blob
+                .iter()
+                .take(8)
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
         );
         let km_params = begin_key_parameters_to_km(params, version_number)
             .map_err(key_parameter_conversion_status)?;
