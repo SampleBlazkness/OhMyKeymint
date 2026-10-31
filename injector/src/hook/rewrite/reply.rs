@@ -373,6 +373,17 @@ pub(super) unsafe fn build_service_reply_rewrite(
     tr: &binder_transaction_data,
     pending: &PendingServiceCall,
 ) -> anyhow::Result<Option<OutboundReply>> {
+    if matches!(&pending.request, ParsedServiceRequest::GetKeyEntry { .. }) {
+        info!(
+            "event=attest_route uid={} pid={} route={}",
+            pending.caller.uid,
+            pending.caller.pid,
+            match pending.route {
+                RouteTarget::Omk => "Omk",
+                RouteTarget::System => "System",
+            }
+        );
+    }
     if pending.route != RouteTarget::Omk {
         return observe_system_service_reply(tr, pending);
     }
