@@ -400,10 +400,19 @@ pub(super) fn build_omk_service_reply(
             build_direct_omk_security_level_reply(*security_level, caller)
         }
         ParsedServiceRequest::GetKeyEntry { key } => {
-            let entry = match ipc::with_omk_once(|omk| Ok(omk.r#getKeyEntry(Some(caller), key)?)) {
-                Ok(entry) => entry,
-                Err(error) => {
-                    return omk_error_reply_for_method("getKeyEntry", caller, &error);
+            let mut attempt = 0u32;
+            let entry = loop {
+                match ipc::with_omk_once(|omk| Ok(omk.r#getKeyEntry(Some(caller), key)?)) {
+                    Ok(entry) => break entry,
+                    Err(error) => {
+                        let not_found = format!("{error:?}").contains("KEY_NOT_FOUND");
+                        if not_found && attempt < 4 {
+                            attempt += 1;
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                            continue;
+                        }
+                        return omk_error_reply_for_method("getKeyEntry", caller, &error);
+                    }
                 }
             };
             log_attest_probe(caller, key, &entry);
