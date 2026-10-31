@@ -411,6 +411,10 @@ pub(super) fn build_omk_service_reply(
             build_direct_omk_security_level_reply(*security_level, caller)
         }
         ParsedServiceRequest::GetKeyEntry { key } => {
+            info!(
+                "event=attest_req uid={} pid={} key={:?}",
+                caller.uid, caller.pid, key
+            );
             let mut attempt = 0u32;
             let entry = loop {
                 match ipc::with_omk_once(|omk| Ok(omk.r#getKeyEntry(Some(caller), key)?)) {
@@ -422,6 +426,10 @@ pub(super) fn build_omk_service_reply(
                             std::thread::sleep(std::time::Duration::from_millis(25));
                             continue;
                         }
+                        warn!(
+                            "event=attest_err uid={} pid={} key={:?} err={:#}",
+                            caller.uid, caller.pid, key, error
+                        );
                         return omk_error_reply_for_method("getKeyEntry", caller, &error);
                     }
                 }
