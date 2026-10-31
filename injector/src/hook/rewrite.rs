@@ -100,6 +100,15 @@ fn precompute_omk_service_mutator_reply(
     let _guard = BypassGuard::enter();
     match request {
         ParsedServiceRequest::UpdateSubcomponent { key, public_cert, certificate_chain } => {
+            info!(
+                "event=attest_update_req uid={} pid={} key={:?} cert_len={} chain_len={}",
+                caller.uid,
+                caller.pid,
+                key,
+                public_cert.as_ref().map_or(0, |v| v.len()),
+                certificate_chain.as_ref().map_or(0, |v| v.len())
+            );
+            let update_alias = key.alias.clone();
             match ipc::with_omk_once(|omk| {
                 Ok(omk.r#updateSubcomponent(
                     Some(caller),
@@ -108,11 +117,24 @@ fn precompute_omk_service_mutator_reply(
                     certificate_chain.as_deref(),
                 )?)
             }) {
-                Ok(()) => PrecomputedServiceReply::UpdateSubcomponentSuccess,
-                Err(error) => PrecomputedServiceReply::Error(precomputed_omk_error_reply(&error)),
+                Ok(()) => {
+                    info!("event=attest_update_ok uid={} alias={:?}", caller.uid, update_alias);
+                    PrecomputedServiceReply::UpdateSubcomponentSuccess
+                }
+                Err(error) => {
+                    warn!(
+                        "event=attest_update_err uid={} alias={:?} err={:#}",
+                        caller.uid, update_alias, error
+                    );
+                    PrecomputedServiceReply::Error(precomputed_omk_error_reply(&error))
+                }
             }
         }
         ParsedServiceRequest::DeleteKey { key } => {
+            info!(
+                "event=attest_delete_req uid={} pid={} key={:?}",
+                caller.uid, caller.pid, key
+            );
             match ipc::with_omk_once(|omk| Ok(omk.r#deleteKey(Some(caller), key)?)) {
                 Ok(()) => PrecomputedServiceReply::DeleteKeySuccess,
                 Err(error) => PrecomputedServiceReply::Error(precomputed_omk_error_reply(&error)),
