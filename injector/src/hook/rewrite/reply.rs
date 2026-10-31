@@ -177,6 +177,36 @@ pub(super) fn build_precomputed_maintenance_reply(
     }
 }
 
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut out = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
+}
+
+fn log_attest_probe<K: std::fmt::Debug>(
+    caller: &CallerInfo,
+    key: &K,
+    entry: &KeyEntryResponse,
+) {
+    let leaf = entry
+        .r#metadata
+        .r#certificate
+        .as_deref()
+        .map(|bytes| format!("{}:{}", bytes.len(), sha256_hex(bytes)));
+    let chain = entry
+        .r#metadata
+        .r#certificateChain
+        .as_deref()
+        .map(|bytes| format!("{}:{}", bytes.len(), sha256_hex(bytes)));
+    info!(
+        "event=attest_probe uid={} pid={} key={:?} leaf={:?} chain={:?}",
+        caller.uid, caller.pid, key, leaf, chain
+    );
+}
+
 pub(super) fn build_no_carrier_omk_key_entry_reply(
     entry: KeyEntryResponse,
     caller: &CallerInfo,
@@ -317,6 +347,7 @@ pub(super) fn build_omk_service_reply(
                     return omk_error_reply_for_method("getKeyEntry", caller, &error);
                 }
             };
+            log_attest_probe(caller, key, &entry);
             Ok(Some(build_no_carrier_omk_key_entry_reply(entry, caller)?))
         }
         ParsedServiceRequest::UpdateSubcomponent { key, public_cert, certificate_chain } => {
