@@ -177,6 +177,60 @@ pub(super) fn build_precomputed_maintenance_reply(
     }
 }
 
+fn der_read(buf: &[u8], pos: usize) -> Option<(u8, usize, usize)> {
+    let tag = *buf.get(pos)?;
+    let mut i = pos + 1;
+    let first = *buf.get(i)?;
+    i += 1;
+    let len = if first & 0x80 == 0 {
+        first as usize
+    } else {
+        let count = (first & 0x7f) as usize;
+        if count == 0 || count > 4 {
+            return None;
+        }
+        let mut value = 0usize;
+        for _ in 0..count {
+            value = (value << 8) | (*buf.get(i)? as usize);
+            i += 1;
+        }
+        value
+    };
+    let end = i.checked_add(len)?;
+    if end > buf.len() {
+        return None;
+    }
+    Some((tag, i, end))
+}
+
+fn cert_spki_sha256(cert: &[u8]) -> Option<String> {
+    let (tag, start, _) = der_read(cert, 0)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let (tbs_tag, tbs_start, _) = der_read(cert, start)?;
+    if tbs_tag != 0x30 {
+        return None;
+    }
+    let mut pos = tbs_start;
+    let (tag, _, end) = der_read(cert, pos)?;
+    if tag == 0xa0 {
+        pos = end;
+    }
+    for expected in [0x02, 0x30, 0x30, 0x30, 0x30] {
+        let (tag, _, end) = der_read(cert, pos)?;
+        if tag != expected {
+            return None;
+        }
+        pos = end;
+    }
+    let (tag, _, end) = der_read(cert, pos)?;
+    if tag != 0x30 {
+        return None;
+    }
+    Some(sha256_hex(&cert[pos..end]))
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut out = String::with_capacity(64);
@@ -201,9 +255,14 @@ fn log_attest_probe<K: std::fmt::Debug>(
         .r#certificateChain
         .as_deref()
         .map(|bytes| format!("{}:{}", bytes.len(), sha256_hex(bytes)));
+    let spki = entry
+        .r#metadata
+        .r#certificate
+        .as_deref()
+        .and_then(cert_spki_sha256);
     info!(
-        "event=attest_probe uid={} pid={} key={:?} leaf={:?} chain={:?}",
-        caller.uid, caller.pid, key, leaf, chain
+        "event=attest_probe uid={} pid={} key={:?} leaf={:?} chain={:?} spki={:?}",
+        caller.uid, caller.pid, key, leaf, chain, spki
     );
 }
 
