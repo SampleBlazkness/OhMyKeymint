@@ -438,6 +438,15 @@ pub(super) fn build_omk_service_reply(
             Ok(Some(build_no_carrier_omk_key_entry_reply(entry, caller)?))
         }
         ParsedServiceRequest::UpdateSubcomponent { key, public_cert, certificate_chain } => {
+            info!(
+                "event=attest_update_req uid={} pid={} key={:?} cert_len={} chain_len={}",
+                caller.uid,
+                caller.pid,
+                key,
+                public_cert.as_ref().map_or(0, |v| v.len()),
+                certificate_chain.as_ref().map_or(0, |v| v.len())
+            );
+            let update_alias = key.alias.clone();
             match ipc::with_omk_once(|omk| {
                 Ok(omk.r#updateSubcomponent(
                     Some(caller),
@@ -446,7 +455,10 @@ pub(super) fn build_omk_service_reply(
                     certificate_chain.as_deref(),
                 )?)
             }) {
-                Ok(()) => Ok(Some(parcel::build_void_reply()?)),
+                Ok(()) => {
+                    info!("event=attest_update_ok uid={} alias={:?}", caller.uid, update_alias);
+                    Ok(Some(parcel::build_void_reply()?))
+                }
                 Err(error) => omk_error_reply_for_method("updateSubcomponent", caller, &error),
             }
         }
@@ -501,6 +513,10 @@ pub(super) fn build_omk_service_reply(
             }
         }
         ParsedServiceRequest::DeleteKey { key } => {
+            info!(
+                "event=attest_delete_req uid={} pid={} key={:?}",
+                caller.uid, caller.pid, key
+            );
             match ipc::with_omk_once(|omk| Ok(omk.r#deleteKey(Some(caller), key)?)) {
                 Ok(()) => Ok(Some(parcel::build_void_reply()?)),
                 Err(error) => omk_error_reply_for_method("deleteKey", caller, &error),
