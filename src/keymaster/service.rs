@@ -316,7 +316,7 @@ fn reject_unprivileged_selinux_domain(key: &KeyDescriptor, caller_uid: AppUid) -
     ) -> Result<KeyEntryResponse> {
         self.ensure_security_levels_current()?;
         let caller_uid = calling_uid(ctx);
-        reject_unprivileged_selinux_domain(key, caller_uid)?;
+        Self::reject_unprivileged_selinux_domain(key, caller_uid)?;
 
         let _super_key = SUPER_KEY
             .read()
@@ -375,7 +375,7 @@ fn reject_unprivileged_selinux_domain(key: &KeyDescriptor, caller_uid: AppUid) -
     ) -> Result<()> {
         self.ensure_security_levels_current()?;
         let caller_uid = calling_uid(ctx);
-        reject_unprivileged_selinux_domain(key, caller_uid)?;
+        Self::reject_unprivileged_selinux_domain(key, caller_uid)?;
         let _super_key = SUPER_KEY
             .read()
             .unwrap()
