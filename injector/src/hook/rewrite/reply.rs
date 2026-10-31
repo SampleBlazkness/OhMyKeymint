@@ -373,6 +373,17 @@ pub(super) unsafe fn build_service_reply_rewrite(
     tr: &binder_transaction_data,
     pending: &PendingServiceCall,
 ) -> anyhow::Result<Option<OutboundReply>> {
+    if matches!(&pending.request, ParsedServiceRequest::GetKeyEntry { .. }) {
+        info!(
+            "event=attest_route uid={} pid={} route={}",
+            pending.caller.uid,
+            pending.caller.pid,
+            match pending.route {
+                RouteTarget::Omk => "Omk",
+                RouteTarget::System => "System",
+            }
+        );
+    }
     if pending.route != RouteTarget::Omk {
         return observe_system_service_reply(tr, pending);
     }
@@ -400,16 +411,42 @@ pub(super) fn build_omk_service_reply(
             build_direct_omk_security_level_reply(*security_level, caller)
         }
         ParsedServiceRequest::GetKeyEntry { key } => {
-            let entry = match ipc::with_omk_once(|omk| Ok(omk.r#getKeyEntry(Some(caller), key)?)) {
-                Ok(entry) => entry,
-                Err(error) => {
-                    return omk_error_reply_for_method("getKeyEntry", caller, &error);
+            info!(
+                "event=attest_req uid={} pid={} key={:?}",
+                caller.uid, caller.pid, key
+            );
+            let mut attempt = 0u32;
+            let entry = loop {
+                match ipc::with_omk_once(|omk| Ok(omk.r#getKeyEntry(Some(caller), key)?)) {
+                    Ok(entry) => break entry,
+                    Err(error) => {
+                        let not_found = format!("{error:?}").contains("KEY_NOT_FOUND");
+                        if not_found && attempt < 20 {
+                            attempt += 1;
+                            std::thread::sleep(std::time::Duration::from_millis(25));
+                            continue;
+                        }
+                        warn!(
+                            "event=attest_err uid={} pid={} key={:?} err={:#}",
+                            caller.uid, caller.pid, key, error
+                        );
+                        return omk_error_reply_for_method("getKeyEntry", caller, &error);
+                    }
                 }
             };
             log_attest_probe(caller, key, &entry);
             Ok(Some(build_no_carrier_omk_key_entry_reply(entry, caller)?))
         }
         ParsedServiceRequest::UpdateSubcomponent { key, public_cert, certificate_chain } => {
+            info!(
+                "event=attest_update_req uid={} pid={} key={:?} cert_len={} chain_len={}",
+                caller.uid,
+                caller.pid,
+                key,
+                public_cert.as_ref().map_or(0, |v| v.len()),
+                certificate_chain.as_ref().map_or(0, |v| v.len())
+            );
+            let update_alias = key.alias.clone();
             match ipc::with_omk_once(|omk| {
                 Ok(omk.r#updateSubcomponent(
                     Some(caller),
@@ -418,7 +455,10 @@ pub(super) fn build_omk_service_reply(
                     certificate_chain.as_deref(),
                 )?)
             }) {
-                Ok(()) => Ok(Some(parcel::build_void_reply()?)),
+                Ok(()) => {
+                    info!("event=attest_update_ok uid={} alias={:?}", caller.uid, update_alias);
+                    Ok(Some(parcel::build_void_reply()?))
+                }
                 Err(error) => omk_error_reply_for_method("updateSubcomponent", caller, &error),
             }
         }
@@ -473,6 +513,10 @@ pub(super) fn build_omk_service_reply(
             }
         }
         ParsedServiceRequest::DeleteKey { key } => {
+            info!(
+                "event=attest_delete_req uid={} pid={} key={:?}",
+                caller.uid, caller.pid, key
+            );
             match ipc::with_omk_once(|omk| Ok(omk.r#deleteKey(Some(caller), key)?)) {
                 Ok(()) => Ok(Some(parcel::build_void_reply()?)),
                 Err(error) => omk_error_reply_for_method("deleteKey", caller, &error),
@@ -536,6 +580,10 @@ pub(super) fn build_omk_security_level_reply(
 
     match &pending.request {
         ParsedSecurityLevelRequest::CreateOperation { key, operation_parameters, forced } => {
+            info!(
+                "event=attest_begin uid={} pid={} key={:?}",
+                caller.uid, caller.pid, key
+            );
             let delay_ms = config::get().main.operation_start_delay_ms;
             if publish_operation_carrier && delay_ms > 0 {
                 // Wait before creating an operation so the delay cannot leave a

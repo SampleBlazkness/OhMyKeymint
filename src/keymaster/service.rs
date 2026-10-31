@@ -300,6 +300,15 @@ impl KeystoreService {
         }
     }
 
+
+fn reject_unprivileged_selinux_domain(key: &KeyDescriptor, caller_uid: AppUid) -> Result<()> {
+    if matches!(key.domain, Domain::SELINUX) && caller_uid.0 >= 10_000 {
+        return Err(Error::Rc(ResponseCode::KEY_NOT_FOUND))
+            .context(err!("SELINUX domain is reserved for system components."));
+    }
+    Ok(())
+}
+
     pub fn get_key_entry(
         &self,
         ctx: Option<&CallerInfo>,
@@ -307,6 +316,7 @@ impl KeystoreService {
     ) -> Result<KeyEntryResponse> {
         self.ensure_security_levels_current()?;
         let caller_uid = calling_uid(ctx);
+        Self::reject_unprivileged_selinux_domain(key, caller_uid)?;
 
         let _super_key = SUPER_KEY
             .read()
@@ -365,6 +375,7 @@ impl KeystoreService {
     ) -> Result<()> {
         self.ensure_security_levels_current()?;
         let caller_uid = calling_uid(ctx);
+        Self::reject_unprivileged_selinux_domain(key, caller_uid)?;
         let _super_key = SUPER_KEY
             .read()
             .unwrap()
