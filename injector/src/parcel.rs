@@ -180,6 +180,17 @@ unsafe fn parse_typed_request<M>(
     if interface != expected_interface {
         bail!("unexpected interface token: {}", interface);
     }
+    {
+        let peek_pos = parcel.data_position();
+        let presence: i32 = parcel.read().unwrap_or(-1);
+        parcel.set_data_position(peek_pos);
+        log::info!(
+            "event=attest_presence code={} interface={} presence={}",
+            code,
+            interface_name,
+            presence
+        );
+    }
 
     let method = method_from_code(code)
         .ok_or_else(|| anyhow!("unknown {interface_name} transaction code {code}"))?;
