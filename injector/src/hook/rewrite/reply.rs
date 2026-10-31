@@ -580,6 +580,10 @@ pub(super) fn build_omk_security_level_reply(
 
     match &pending.request {
         ParsedSecurityLevelRequest::CreateOperation { key, operation_parameters, forced } => {
+            info!(
+                "event=attest_begin uid={} pid={} key={:?}",
+                caller.uid, caller.pid, key
+            );
             let delay_ms = config::get().main.operation_start_delay_ms;
             if publish_operation_carrier && delay_ms > 0 {
                 // Wait before creating an operation so the delay cannot leave a
