@@ -750,6 +750,19 @@ impl IKeyMintDevice for KeyMintWrapper {
         let version_number = resolve_hardware_profile(self.security_level).version_number;
         let key_parameters = key_parameters_to_km(keyParams, version_number)
             .map_err(key_parameter_conversion_status)?;
+
+        // An attestation certificate chain is produced inside the secure world and
+        // costs real time there. Without this, the challenged path can look cheaper
+        // than the plain one, which is a signature of a software keystore.
+        if keyParams.iter().any(|kp| kp.tag == Tag::ATTESTATION_CHALLENGE) {
+            let extra = {
+                let mut rng = rand::rng();
+                std::time::Duration::from_millis(rng.random_range(22..=38))
+            };
+            log::trace!("attestation extra delay {} ms", extra.as_millis());
+            std::thread::sleep(extra);
+        }
+
         let attestation_key = if let Some(ak) = attestation_key {
             let key_parameters = key_parameters_to_km(&ak.attestKeyParams, version_number)
                 .map_err(key_parameter_conversion_status)?;
