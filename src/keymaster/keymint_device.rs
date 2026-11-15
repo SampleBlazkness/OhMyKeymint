@@ -748,9 +748,20 @@ impl IKeyMintDevice for KeyMintWrapper {
         crate::android::hardware::security::keymint::KeyCreationResult::KeyCreationResult,
     > {
         let version_number = resolve_hardware_profile(self.security_level).version_number;
+
+        // No StrongBox attestation key is available to this module, so a key minted
+        // here could never carry a matching chain. Report the hardware as absent and
+        // let the caller fall back to the TEE level, as a device without StrongBox
+        // would.
+        if self.security_level == SecurityLevel::STRONGBOX {
+            return Err(Status::new_service_specific_error(
+                ErrorCode::HARDWARE_TYPE_UNAVAILABLE.0,
+                None,
+            ));
+        }
+
         let key_parameters = key_parameters_to_km(keyParams, version_number)
             .map_err(key_parameter_conversion_status)?;
-
         // An attestation certificate chain is produced inside the secure world and
         // costs real time there. Without this, the challenged path can look cheaper
         // than the plain one, which is a signature of a software keystore.
@@ -800,6 +811,13 @@ impl IKeyMintDevice for KeyMintWrapper {
     ) -> rsbinder::BinderResult<
         crate::android::hardware::security::keymint::KeyCreationResult::KeyCreationResult,
     > {
+        if self.security_level == SecurityLevel::STRONGBOX {
+            return Err(Status::new_service_specific_error(
+                ErrorCode::HARDWARE_TYPE_UNAVAILABLE.0,
+                None,
+            ));
+        }
+
         let version_number = resolve_hardware_profile(self.security_level).version_number;
         let key_parameters = key_parameters_to_km(key_params, version_number)
             .map_err(key_parameter_conversion_status)?;
