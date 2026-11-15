@@ -181,10 +181,6 @@ pub(super) fn build_no_carrier_omk_key_entry_reply(
     entry: KeyEntryResponse,
     caller: &CallerInfo,
 ) -> anyhow::Result<parcel::OwnedReply> {
-    if entry.r#iSecurityLevel.is_none() {
-        return parcel::build_key_entry_reply(entry);
-    }
-
     let carrier = register_synthetic_security_level_carrier(
         entry.r#metadata.keySecurityLevel,
         ServiceMethod::GetKeyEntry,
