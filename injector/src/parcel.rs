@@ -180,6 +180,37 @@ unsafe fn parse_typed_request<M>(
     if interface != expected_interface {
         bail!("unexpected interface token: {}", interface);
     }
+    if interface_name == "IKeystoreService" {
+        if let Some(method) = crate::identify::service_method_from_code(code) {
+            use crate::identify::ServiceMethod;
+            let takes_key_descriptor = matches!(
+                method,
+                ServiceMethod::GetKeyEntry
+                    | ServiceMethod::UpdateSubcomponent
+                    | ServiceMethod::DeleteKey
+                    | ServiceMethod::Grant
+                    | ServiceMethod::Ungrant
+            );
+            if takes_key_descriptor {
+                let peek_pos = parcel.data_position();
+                let presence: i32 = parcel.read().unwrap_or(-1);
+                parcel.set_data_position(peek_pos);
+                log::info!(
+                    "event=attest_presence code={} method={:?} presence={}",
+                    code,
+                    method,
+                    presence
+                );
+                if presence != 1 {
+                    bail!(
+                        "unsupported AIDL presence marker {} for {:?}",
+                        presence,
+                        method
+                    );
+                }
+            }
+        }
+    }
 
     let method = method_from_code(code)
         .ok_or_else(|| anyhow!("unknown {interface_name} transaction code {code}"))?;
