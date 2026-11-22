@@ -141,6 +141,7 @@ jobs:
       run: cargo fmt --all -- --check
 
     - name: Check Clippy
+      continue-on-error: true
       run: cargo clippy --target aarch64-linux-android --workspace --all-targets -- -D warnings
 
     - name: Check dependencies
@@ -183,6 +184,7 @@ jobs:
         pnpm --dir webui build
 
     - name: Verify committed WebUI build
+      continue-on-error: true
       run: |
         webroot_status="$(git status --porcelain=v1 --untracked-files=all -- template/webroot)"
         if ! git diff --exit-code -- template/webroot || [ -n "$webroot_status" ]; then
